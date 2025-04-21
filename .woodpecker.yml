@@ -1,0 +1,72 @@
+steps:
+  debug:
+    image: alpine
+    commands:
+      - echo "✅ Pipeline backend déclenché sur ${CI_COMMIT_BRANCH}"
+      - "echo Event déclencheur : ${CI_PIPELINE_EVENT}"
+    when:
+      event: [push, manual, pull_request]
+
+  build:
+    image: python:3.11
+    commands:
+      - echo "📦 Build backend"
+      - pip install -r requirements.txt
+      - echo "✅ Tests backend à venir"
+    when:
+      branch: [staging, prod]
+      event: [push, manual]
+
+  deploy-staging:
+    image: docker/compose:1.29.2
+    privileged: true
+    depends_on: [build]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      DJANGO_SECRET_KEY:
+        from_secret: DJANGO_SECRET_KEY
+      DB_HOST:
+        from_secret: DB_HOST
+      DB_PORT:
+        from_secret: DB_PORT
+      DB_USER:
+        from_secret: DB_USER
+      DB_PASSWORD:
+        from_secret: DB_PASSWORD
+      DB_NAME:
+        from_secret: DB_NAME
+    commands:
+      - docker-compose -f docker-compose.staging.yml -p qip_api_staging down --remove-orphans || true
+      - docker rm -f qip_api_staging || true
+      - docker-compose -f docker-compose.staging.yml -p qip_api_staging up -d --build --remove-orphans
+      - docker-compose -f docker-compose.staging.yml -p qip_api_staging run --rm pytest
+    when:
+      branch: [staging]
+      event: [push, manual]
+
+  deploy-prod:
+    image: docker/compose:1.29.2
+    depends_on: [build]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      DJANGO_SECRET_KEY:
+        from_secret: DJANGO_SECRET_KEY
+      DB_HOST:
+        from_secret: DB_HOST
+      DB_PORT:
+        from_secret: DB_PORT
+      DB_USER:
+        from_secret: DB_USER
+      DB_PASSWORD:
+        from_secret: DB_PASSWORD
+      DB_NAME:
+        from_secret: DB_NAME
+    commands:
+      - docker-compose -f docker-compose.prod.yml -p qip_api_prod down --remove-orphans || true
+      - docker rm -f qip_api_prod || true
+      - docker-compose -f docker-compose.prod.yml -p qip_api_prod up -d --build --remove-orphans
+    when:
+      branch: [prod]
+      event: [push, manual]
