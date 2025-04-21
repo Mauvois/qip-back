@@ -43,7 +43,7 @@ steps:
       GS_PROJECT_ID:
         from_secret: GS_PROJECT_ID
       GOOGLE_APPLICATION_CREDENTIALS:
-        from_secret: GOOGLE_APPLICATION_CREDENTIALS
+        from_secret: GOOGLE_CREDENTIALS_JSON
     commands:
       - docker-compose -f docker/staging/docker-compose.yml -p qip_api_staging down --remove-orphans || true
       - docker rm -f qip_api_staging || true
@@ -78,7 +78,7 @@ steps:
       GS_PROJECT_ID:
         from_secret: GS_PROJECT_ID
       GOOGLE_APPLICATION_CREDENTIALS:
-        from_secret: GOOGLE_APPLICATION_CREDENTIALS
+        from_secret: GOOGLE_CREDENTIALS_JSON
     commands:
       - docker-compose -f docker/prod/docker-compose.yml -p qip_api_prod down --remove-orphans || true
       - docker rm -f qip_api_prod || true
