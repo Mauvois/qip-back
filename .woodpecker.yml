@@ -37,10 +37,10 @@ steps:
       DB_NAME:
         from_secret: DB_NAME
     commands:
-      - docker-compose -f docker-compose.staging.yml -p qip_api_staging down --remove-orphans || true
+      - docker-compose -f docker/staging/docker-compose.yml -p qip_api_staging down --remove-orphans || true
       - docker rm -f qip_api_staging || true
-      - docker-compose -f docker-compose.staging.yml -p qip_api_staging up -d --build --remove-orphans
-      - docker-compose -f docker-compose.staging.yml -p qip_api_staging run --rm pytest
+      - docker-compose -f docker/staging/docker-compose.yml -p qip_api_staging up -d --build --remove-orphans
+      - docker-compose -f docker/staging/docker-compose.yml -p qip_api_staging run --rm pytest
     when:
       branch: [staging]
       event: [push, manual]
@@ -64,9 +64,9 @@ steps:
       DB_NAME:
         from_secret: DB_NAME
     commands:
-      - docker-compose -f docker-compose.prod.yml -p qip_api_prod down --remove-orphans || true
+      - docker-compose -f docker/prod/docker-compose.yml -p qip_api_prod down --remove-orphans || true
       - docker rm -f qip_api_prod || true
-      - docker-compose -f docker-compose.prod.yml -p qip_api_prod up -d --build --remove-orphans
+      - docker-compose -f docker/prod/docker-compose.yml -p qip_api_prod up -d --build --remove-orphans
     when:
       branch: [prod]
       event: [push, manual]
