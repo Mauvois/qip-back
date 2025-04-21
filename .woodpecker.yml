@@ -3,7 +3,7 @@ steps:
     image: alpine
     commands:
       - echo "✅ Pipeline backend déclenché sur ${CI_COMMIT_BRANCH}"
-      - echo "📦 Event déclencheur : ${CI_PIPELINE_EVENT}"
+      - "echo Event déclencheur : ${CI_PIPELINE_EVENT}"
     when:
       event: [push, manual, pull_request]
 
@@ -38,10 +38,13 @@ steps:
         from_secret: DB_NAME
       SIGNING_SECRET:
         from_secret: SIGNING_SECRET
-      GOOGLE_CREDENTIALS_JSON:
-        from_secret: GOOGLE_CREDENTIALS_JSON
+      GS_BUCKET_NAME:
+        from_secret: GS_BUCKET_NAME
+      GS_PROJECT_ID:
+        from_secret: GS_PROJECT_ID
+      GOOGLE_APPLICATION_CREDENTIALS:
+        from_secret: GOOGLE_APPLICATION_CREDENTIALS
     commands:
-      - echo "$GOOGLE_CREDENTIALS_JSON" > /tmp/gcp-credentials.json
       - docker-compose -f docker/staging/docker-compose.yml -p qip_api_staging down --remove-orphans || true
       - docker rm -f qip_api_staging || true
       - docker-compose -f docker/staging/docker-compose.yml -p qip_api_staging up -d --build --remove-orphans
@@ -70,10 +73,13 @@ steps:
         from_secret: DB_NAME
       SIGNING_SECRET:
         from_secret: SIGNING_SECRET
-      GOOGLE_CREDENTIALS_JSON:
-        from_secret: GOOGLE_CREDENTIALS_JSON
+      GS_BUCKET_NAME:
+        from_secret: GS_BUCKET_NAME
+      GS_PROJECT_ID:
+        from_secret: GS_PROJECT_ID
+      GOOGLE_APPLICATION_CREDENTIALS:
+        from_secret: GOOGLE_APPLICATION_CREDENTIALS
     commands:
-      - echo "$GOOGLE_CREDENTIALS_JSON" > /tmp/gcp-credentials.json
       - docker-compose -f docker/prod/docker-compose.yml -p qip_api_prod down --remove-orphans || true
       - docker rm -f qip_api_prod || true
       - docker-compose -f docker/prod/docker-compose.yml -p qip_api_prod up -d --build --remove-orphans
