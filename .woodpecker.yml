@@ -36,6 +36,8 @@ steps:
         from_secret: DB_PASSWORD
       DB_NAME:
         from_secret: DB_NAME
+      SIGNING_SECRET:
+        from_secret: SIGNING_SECRET
     commands:
       - docker-compose -f docker/staging/docker-compose.yml -p qip_api_staging down --remove-orphans || true
       - docker rm -f qip_api_staging || true
