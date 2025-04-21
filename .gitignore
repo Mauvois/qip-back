@@ -172,6 +172,10 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
-*.json
-*.key
-*.crt
+config/ssl/*.key
+config/ssl/*.crt
+config/ssl/*.pem
+
+# Environment config
+.env.staging
+.env.prod

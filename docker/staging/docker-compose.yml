@@ -1,0 +1,42 @@
+version: "3.9"
+
+services:
+  api:
+    build: .
+    container_name: qip_api_staging
+    ports:
+      - "8011:80"
+    environment:
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME}
+    networks:
+      - qip_backend_net
+      - woodpecker_default
+    restart: unless-stopped
+
+  pytest:
+    image: qip_api_staging_api
+    working_dir: /app
+    command: sh -c "pip install -r requirements.txt && pytest"
+    environment:
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME}
+    depends_on:
+      - api
+    networks:
+      - qip_backend_net
+      - woodpecker_default
+
+networks:
+  qip_backend_net:
+    external: true
+  woodpecker_default:
+    external: true
