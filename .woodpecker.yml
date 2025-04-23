@@ -34,9 +34,6 @@ steps:
     image: docker/compose:1.29.2
     privileged: true
     depends_on: [build]
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-      - ./secrets:/secrets
     environment:
       DJANGO_SECRET_KEY:
         from_secret: DJANGO_SECRET_KEY
@@ -56,20 +53,20 @@ steps:
         from_secret: GS_BUCKET_NAME
       GS_PROJECT_ID:
         from_secret: GS_PROJECT_ID
+      GOOGLE_CREDENTIALS_JSON:
+        from_secret: GOOGLE_CREDENTIALS_JSON
       GOOGLE_APPLICATION_CREDENTIALS: /secrets/credentials.json
     commands:
-      - mkdir -p ./secrets
-      - echo "$GOOGLE_CREDENTIALS_JSON" > ./secrets/credentials.json
-      - cat ./secrets/credentials.json  # 👈 sanity check
+      - mkdir -p secrets
+      - echo "$GOOGLE_CREDENTIALS_JSON" > secrets/credentials.json
+      - cat secrets/credentials.json  # debug
       - docker-compose -f docker/staging/docker-compose.yml -p qip_api_staging down --remove-orphans || true
-      - docker rm -f qip_api_staging || true
       - docker-compose -f docker/staging/docker-compose.yml -p qip_api_staging up -d --build --remove-orphans
       - docker-compose -f docker/staging/docker-compose.yml -p qip_api_staging run --rm pytest
-    secrets:
-      - GOOGLE_CREDENTIALS_JSON
     when:
       branch: [staging]
       event: [push, manual]
+
 
   deploy-prod:
     image: docker/compose:1.29.2
