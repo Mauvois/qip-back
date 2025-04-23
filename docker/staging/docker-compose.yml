@@ -16,9 +16,9 @@ services:
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
       DB_NAME: ${DB_NAME}
-      GOOGLE_APPLICATION_CREDENTIALS: /app/config/credentials.json
+      GOOGLE_APPLICATION_CREDENTIALS: /tmp/gcp-credentials.json
     volumes:
-      - /tmp/gcp-credentials.json:/app/config/credentials.json:ro
+      - /tmp/gcp-credentials.json:/tmp/gcp-credentials.json:ro
     networks:
       - qip_backend_net
       - woodpecker_default
@@ -37,9 +37,9 @@ services:
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
       DB_NAME: ${DB_NAME}
-      GOOGLE_APPLICATION_CREDENTIALS: /app/config/credentials.json
+      GOOGLE_APPLICATION_CREDENTIALS: /tmp/gcp-credentials.json
     volumes:
-      - /tmp/gcp-credentials.json:/app/config/credentials.json:ro
+      - /tmp/gcp-credentials.json:/tmp/gcp-credentials.json:ro
     depends_on:
       - api
     networks:

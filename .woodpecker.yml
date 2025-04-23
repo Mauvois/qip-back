@@ -17,12 +17,24 @@ steps:
       branch: [staging, prod]
       event: [push, manual]
 
+  prepare-secrets:
+    image: alpine
+    commands:
+      - echo "$GOOGLE_CREDENTIALS_JSON" > /tmp/gcp-credentials.json
+    environment:
+      GOOGLE_CREDENTIALS_JSON:
+        from_secret: GOOGLE_CREDENTIALS_JSON
+    when:
+      branch: [staging, prod]
+      event: [push, manual]
+
   deploy-staging:
     image: docker/compose:1.29.2
     privileged: true
-    depends_on: [build]
+    depends_on: [build, prepare-secrets]
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      - /tmp/gcp-credentials.json:/tmp/gcp-credentials.json
     environment:
       DJANGO_SECRET_KEY:
         from_secret: DJANGO_SECRET_KEY
@@ -42,8 +54,7 @@ steps:
         from_secret: GS_BUCKET_NAME
       GS_PROJECT_ID:
         from_secret: GS_PROJECT_ID
-      GOOGLE_APPLICATION_CREDENTIALS:
-        from_secret: GOOGLE_CREDENTIALS_JSON
+      GOOGLE_APPLICATION_CREDENTIALS: /tmp/gcp-credentials.json
     commands:
       - docker-compose -f docker/staging/docker-compose.yml -p qip_api_staging down --remove-orphans || true
       - docker rm -f qip_api_staging || true
@@ -55,9 +66,11 @@ steps:
 
   deploy-prod:
     image: docker/compose:1.29.2
-    depends_on: [build]
+    privileged: true
+    depends_on: [build, prepare-secrets]
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      - /tmp/gcp-credentials.json:/tmp/gcp-credentials.json
     environment:
       DJANGO_SECRET_KEY:
         from_secret: DJANGO_SECRET_KEY
@@ -77,8 +90,7 @@ steps:
         from_secret: GS_BUCKET_NAME
       GS_PROJECT_ID:
         from_secret: GS_PROJECT_ID
-      GOOGLE_APPLICATION_CREDENTIALS:
-        from_secret: GOOGLE_CREDENTIALS_JSON
+      GOOGLE_APPLICATION_CREDENTIALS: /tmp/gcp-credentials.json
     commands:
       - docker-compose -f docker/prod/docker-compose.yml -p qip_api_prod down --remove-orphans || true
       - docker rm -f qip_api_prod || true
