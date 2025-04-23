@@ -34,6 +34,8 @@ steps:
     image: docker/compose:1.29.2
     privileged: true
     depends_on: [build]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
     environment:
       DJANGO_SECRET_KEY:
         from_secret: DJANGO_SECRET_KEY
