@@ -27,7 +27,7 @@ services:
       GOOGLE_CREDENTIALS_JSON: ${GOOGLE_CREDENTIALS_JSON}
       GOOGLE_APPLICATION_CREDENTIALS: /secrets/credentials.json
     volumes:
-      - secrets:/secrets
+      - ./secrets:/secrets:ro
     networks:
       - qip_backend_net
       - woodpecker_default
@@ -56,7 +56,7 @@ services:
       GOOGLE_CREDENTIALS_JSON: ${GOOGLE_CREDENTIALS_JSON}
       GOOGLE_APPLICATION_CREDENTIALS: /secrets/credentials.json
     volumes:
-      - secrets:/secrets
+      - ./secrets:/secrets:ro
     depends_on:
       - api
     networks:
