@@ -9,11 +9,11 @@ services:
     ports:
       - "8011:80"
     command: >
-      sh -c '
-        echo "$GOOGLE_CREDENTIALS_JSON" > /tmp/gcp-credentials.json &&
+      sh -c "
+        echo \"$GOOGLE_CREDENTIALS_JSON\" > /tmp/gcp-credentials.json &&
         python manage.py migrate &&
         gunicorn qip.wsgi:application --bind 0.0.0.0:80
-      '
+      "
     environment:
       DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
       SIGNING_SECRET: ${SIGNING_SECRET}
@@ -35,11 +35,11 @@ services:
     image: qip_api_staging_api
     working_dir: /app
     command: >
-      sh -c '
-        echo "$GOOGLE_CREDENTIALS_JSON" > /tmp/gcp-credentials.json &&
+      sh -c "
+        echo \"$GOOGLE_CREDENTIALS_JSON\" > /tmp/gcp-credentials.json &&
         pip install -r requirements.txt &&
         pytest --ds=qip.settings -v
-      '
+      "
     environment:
       DEBUG: "false"
       DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}

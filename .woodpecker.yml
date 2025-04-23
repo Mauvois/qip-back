@@ -20,14 +20,16 @@ steps:
   prepare-secrets:
     image: alpine
     commands:
-      - rm -rf /tmp/gcp-credentials.json
-      - echo "$GOOGLE_CREDENTIALS_JSON" > /tmp/gcp-credentials.json
+      - echo "${GOOGLE_CREDENTIALS_JSON}" > /tmp/gcp-credentials.json
     environment:
       GOOGLE_CREDENTIALS_JSON:
         from_secret: GOOGLE_CREDENTIALS_JSON
+    volumes:
+      - /tmp:/tmp
     when:
       branch: [staging, prod]
       event: [push, manual]
+
 
 
 
