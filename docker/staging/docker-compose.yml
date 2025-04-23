@@ -10,7 +10,7 @@ services:
       - "8011:80"
     command: >
       sh -c "
-        echo \"$GOOGLE_CREDENTIALS_JSON\" > /tmp/gcp-credentials.json &&
+        echo \"$GOOGLE_CREDENTIALS_JSON\" > /secrets/credentials.json &&
         python manage.py migrate &&
         gunicorn qip.wsgi:application --bind 0.0.0.0:80
       "
@@ -25,7 +25,9 @@ services:
       GS_BUCKET_NAME: ${GS_BUCKET_NAME}
       GS_PROJECT_ID: ${GS_PROJECT_ID}
       GOOGLE_CREDENTIALS_JSON: ${GOOGLE_CREDENTIALS_JSON}
-      GOOGLE_APPLICATION_CREDENTIALS: /tmp/gcp-credentials.json
+      GOOGLE_APPLICATION_CREDENTIALS: /secrets/credentials.json
+    volumes:
+      - secrets:/secrets
     networks:
       - qip_backend_net
       - woodpecker_default
@@ -36,7 +38,7 @@ services:
     working_dir: /app
     command: >
       sh -c "
-        echo \"$GOOGLE_CREDENTIALS_JSON\" > /tmp/gcp-credentials.json &&
+        echo \"$GOOGLE_CREDENTIALS_JSON\" > /secrets/credentials.json &&
         pip install -r requirements.txt &&
         pytest --ds=qip.settings -v
       "
@@ -52,12 +54,17 @@ services:
       GS_BUCKET_NAME: ${GS_BUCKET_NAME}
       GS_PROJECT_ID: ${GS_PROJECT_ID}
       GOOGLE_CREDENTIALS_JSON: ${GOOGLE_CREDENTIALS_JSON}
-      GOOGLE_APPLICATION_CREDENTIALS: /tmp/gcp-credentials.json
+      GOOGLE_APPLICATION_CREDENTIALS: /secrets/credentials.json
+    volumes:
+      - secrets:/secrets
     depends_on:
       - api
     networks:
       - qip_backend_net
       - woodpecker_default
+
+volumes:
+  secrets:
 
 networks:
   qip_backend_net:
