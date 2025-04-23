@@ -9,11 +9,11 @@ services:
     ports:
       - "8011:80"
     command: >
-      sh -c "
-        echo \"${GOOGLE_CREDENTIALS_JSON}\" > /tmp/gcp-credentials.json &&
+      sh -c '
+        echo "$GOOGLE_CREDENTIALS_JSON" > /tmp/gcp-credentials.json &&
         python manage.py migrate &&
         gunicorn qip.wsgi:application --bind 0.0.0.0:80
-      "
+      '
     environment:
       DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
       SIGNING_SECRET: ${SIGNING_SECRET}
@@ -24,6 +24,7 @@ services:
       DB_NAME: ${DB_NAME}
       GS_BUCKET_NAME: ${GS_BUCKET_NAME}
       GS_PROJECT_ID: ${GS_PROJECT_ID}
+      GOOGLE_CREDENTIALS_JSON: ${GOOGLE_CREDENTIALS_JSON}
       GOOGLE_APPLICATION_CREDENTIALS: /tmp/gcp-credentials.json
     networks:
       - qip_backend_net
@@ -34,11 +35,11 @@ services:
     image: qip_api_staging_api
     working_dir: /app
     command: >
-      sh -c "
-        echo \"${GOOGLE_CREDENTIALS_JSON}\" > /tmp/gcp-credentials.json &&
+      sh -c '
+        echo "$GOOGLE_CREDENTIALS_JSON" > /tmp/gcp-credentials.json &&
         pip install -r requirements.txt &&
         pytest --ds=qip.settings -v
-      "
+      '
     environment:
       DEBUG: "false"
       DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
@@ -50,6 +51,7 @@ services:
       DB_NAME: ${DB_NAME}
       GS_BUCKET_NAME: ${GS_BUCKET_NAME}
       GS_PROJECT_ID: ${GS_PROJECT_ID}
+      GOOGLE_CREDENTIALS_JSON: ${GOOGLE_CREDENTIALS_JSON}
       GOOGLE_APPLICATION_CREDENTIALS: /tmp/gcp-credentials.json
     depends_on:
       - api

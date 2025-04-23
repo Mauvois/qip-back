@@ -19,14 +19,18 @@ steps:
 
   prepare-secrets:
     image: alpine
+    volumes:
+      - /tmp:/tmp
     commands:
       - echo "$GOOGLE_CREDENTIALS_JSON" > /tmp/gcp-credentials.json
+      - cat /tmp/gcp-credentials.json # debug
     environment:
       GOOGLE_CREDENTIALS_JSON:
         from_secret: GOOGLE_CREDENTIALS_JSON
     when:
       branch: [staging, prod]
       event: [push, manual]
+
 
   deploy-staging:
     image: docker/compose:1.29.2
