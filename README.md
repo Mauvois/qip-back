@@ -6,3 +6,4 @@
 ## test 5 formatage credentials json GCP
 ## test 6 formatage credentials json GCP
 ## test 7 ajustement paramètre BDD
+## test 8 ajustement paramètre BDD user
