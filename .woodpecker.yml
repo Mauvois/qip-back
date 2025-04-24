@@ -3,7 +3,7 @@ steps:
     image: alpine
     commands:
       - echo "✅ Pipeline backend déclenché sur ${CI_COMMIT_BRANCH}"
-      - "echo Event déclencheur : ${CI_PIPELINE_EVENT}"
+      - echo "🔍 Event déclencheur : ${CI_PIPELINE_EVENT}"
     when:
       event: [push, manual, pull_request]
 
@@ -13,19 +13,6 @@ steps:
       - echo "📦 Build backend"
       - pip install -r requirements.txt
       - echo "✅ Tests backend à venir"
-    when:
-      branch: [staging, prod]
-      event: [push, manual]
-
-  prepare-secrets:
-    image: alpine
-    volumes:
-      - secrets:/secrets
-    commands:
-      - echo "$GOOGLE_CREDENTIALS_JSON" > /secrets/credentials.json
-    environment:
-      GOOGLE_CREDENTIALS_JSON:
-        from_secret: GOOGLE_CREDENTIALS_JSON
     when:
       branch: [staging, prod]
       event: [push, manual]
@@ -55,13 +42,10 @@ steps:
         from_secret: GS_BUCKET_NAME
       GS_PROJECT_ID:
         from_secret: GS_PROJECT_ID
-      GOOGLE_CREDENTIALS_JSON:
-        from_secret: GOOGLE_CREDENTIALS_JSON
-      GOOGLE_APPLICATION_CREDENTIALS: /secrets/credentials.json
+      GOOGLE_CREDENTIALS_B64:
+        from_secret: GOOGLE_CREDENTIALS_B64
     commands:
-      - mkdir -p secrets
-      - echo "$GOOGLE_CREDENTIALS_JSON" > secrets/credentials.json
-      - cat secrets/credentials.json  # debug
+      - echo "🧪 Déploiement staging..."
       - docker-compose -f docker/staging/docker-compose.yml -p qip_api_staging down --remove-orphans || true
       - docker-compose -f docker/staging/docker-compose.yml -p qip_api_staging up -d --build --remove-orphans
       - docker-compose -f docker/staging/docker-compose.yml -p qip_api_staging run --rm pytest
@@ -69,14 +53,12 @@ steps:
       branch: [staging]
       event: [push, manual]
 
-
   deploy-prod:
     image: docker/compose:1.29.2
     privileged: true
-    depends_on: [build, prepare-secrets]
+    depends_on: [build]
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - secrets:/secrets
     environment:
       DJANGO_SECRET_KEY:
         from_secret: DJANGO_SECRET_KEY
@@ -96,14 +78,13 @@ steps:
         from_secret: GS_BUCKET_NAME
       GS_PROJECT_ID:
         from_secret: GS_PROJECT_ID
-      GOOGLE_APPLICATION_CREDENTIALS: /secrets/credentials.json
+      GOOGLE_CREDENTIALS_B64:
+        from_secret: GOOGLE_CREDENTIALS_B64
     commands:
+      - echo "🚀 Déploiement prod..."
       - docker-compose -f docker/prod/docker-compose.yml -p qip_api_prod down --remove-orphans || true
       - docker rm -f qip_api_prod || true
       - docker-compose -f docker/prod/docker-compose.yml -p qip_api_prod up -d --build --remove-orphans
     when:
       branch: [prod]
       event: [push, manual]
-
-volumes:
-  - name: secrets
