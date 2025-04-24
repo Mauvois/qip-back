@@ -3,7 +3,6 @@ steps:
     image: alpine
     commands:
       - echo "✅ Pipeline backend déclenché sur ${CI_COMMIT_BRANCH}"
-      - echo "🔍 Event déclencheur : ${CI_PIPELINE_EVENT}"
     when:
       event: [push, manual, pull_request]
 
