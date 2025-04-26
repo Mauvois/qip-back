@@ -35,6 +35,7 @@ services:
     command: >
       sh -c "
         pip install -r requirements.txt &&
+        until nc -z -v -w30 $DB_HOST $DB_PORT; do echo 'Waiting for database...'; sleep 1; done &&
         pytest --ds=qip.settings -v
       "
     environment:
