@@ -17,7 +17,7 @@ steps:
       event: [push, manual]
 
   deploy-staging:
-    image: docker/compose:1.29.2
+    image: docker:28-cli
     privileged: true
     depends_on: [build]
     volumes:
@@ -47,15 +47,15 @@ steps:
       - echo "🧪 Déploiement staging..."
       - docker network inspect qip_backend_net >/dev/null 2>&1 || docker network create qip_backend_net
       - docker network inspect woodpecker_default >/dev/null 2>&1 || docker network create woodpecker_default
-      - docker-compose -f docker/staging/docker-compose.yml -p qip_api_staging down --remove-orphans || true
-      - docker-compose -f docker/staging/docker-compose.yml -p qip_api_staging up -d --build --remove-orphans
-      - docker-compose -f docker/staging/docker-compose.yml -p qip_api_staging run --rm pytest
+      - docker compose -f docker/staging/docker-compose.yml -p qip_api_staging down --remove-orphans || true
+      - docker compose -f docker/staging/docker-compose.yml -p qip_api_staging up -d --build --remove-orphans
+      - docker compose -f docker/staging/docker-compose.yml -p qip_api_staging run --rm pytest
     when:
       branch: [staging]
       event: [push, manual]
 
   deploy-prod:
-    image: docker/compose:1.29.2
+    image: docker:28-cli
     privileged: true
     depends_on: [build]
     volumes:
@@ -85,9 +85,9 @@ steps:
       - echo "🚀 Déploiement prod..."
       - docker network inspect qip_backend_net >/dev/null 2>&1 || docker network create qip_backend_net
       - docker network inspect woodpecker_default >/dev/null 2>&1 || docker network create woodpecker_default
-      - docker-compose -f docker/prod/docker-compose.yml -p qip_api_prod down --remove-orphans || true
+      - docker compose -f docker/prod/docker-compose.yml -p qip_api_prod down --remove-orphans || true
       - docker rm -f qip_api_prod || true
-      - docker-compose -f docker/prod/docker-compose.yml -p qip_api_prod up -d --build --remove-orphans
+      - docker compose -f docker/prod/docker-compose.yml -p qip_api_prod up -d --build --remove-orphans
     when:
       branch: [prod]
       event: [push, manual]
