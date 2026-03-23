@@ -1,7 +1,6 @@
-version: "3.9"
-
 services:
   api:
+    image: qip_api_staging_api
     build:
       context: ../..
       dockerfile: Dockerfile

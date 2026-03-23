@@ -1,8 +1,9 @@
-version: "3.9"
-
 services:
   api:
-    build: .
+    image: qip_api_prod_api
+    build:
+      context: ../..
+      dockerfile: Dockerfile
     container_name: qip_api_prod
     ports:
       - "8012:80"  # ou un autre port libre si 8012 est pris
