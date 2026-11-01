@@ -1,4 +1,5 @@
 from datetime import datetime
+import uuid
 from django.conf import settings
 from rest_framework import viewsets, status
 import requests
@@ -12,6 +13,8 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.viewsets import ModelViewSet
 from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import PermissionDenied
+from django.shortcuts import get_object_or_404
 from django.http import JsonResponse
 from django.http import HttpResponse
 from .utility import set_token_cookie, generate_signed_url, CustomGoogleCloudStorage
@@ -28,9 +31,17 @@ import pytest
 from django.utils.crypto import get_random_string
 from django.core.mail import send_mail
 from django.contrib.auth.tokens import default_token_generator
-from django.urls import reverse
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 from django.utils.encoding import force_bytes, force_str
+from django.utils import timezone
+from .terms import TERMS_SECTIONS, TERMS_VERSION
+
+
+class TermsView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        return Response({'version': TERMS_VERSION, 'sections': TERMS_SECTIONS})
 
 
 class SignupView(APIView):
@@ -43,11 +54,23 @@ class SignupView(APIView):
         first_name = request.data.get('first_name')
         last_name = request.data.get('last_name')
 
+        if request.data.get('accept_terms') is not True or request.data.get('terms_version') != TERMS_VERSION:
+            raise ValidationError({'accept_terms': 'Accept the current conditions of use to create an account.'})
+
+        if any(not isinstance(value, str) or not value.strip() for value in
+               (username, password, email, first_name, last_name)):
+            raise ValidationError({'error': 'All registration fields are required.'})
+        if len(username) > 30 or len(first_name) > 30 or len(last_name) > 30 or len(email) > 254:
+            raise ValidationError({'error': 'One or more registration fields are too long.'})
+
         if User.objects.filter(username=username).exists():
             raise ValidationError({'error': 'Username already exists'})
+        if User.objects.filter(email=email).exists():
+            raise ValidationError({'error': 'Email already exists'})
 
         user = User.objects.create_user(
-            username=username, email=email, password=password, first_name=first_name, last_name=last_name)
+            username=username, email=email, password=password, first_name=first_name, last_name=last_name,
+            terms_version=TERMS_VERSION, terms_accepted_at=timezone.now())
 
         refresh = RefreshToken.for_user(user)
         access_token = str(refresh.access_token)
@@ -100,10 +123,16 @@ class UserViewSet(PermissionMixin, ModelViewSet):
     queryset = User.objects.all()
     serializer_class = UserSerializer
 
+    def perform_create(self, serializer):
+        raise PermissionDenied('Use signup to create an account.')
+
 
 class MediaViewSet(PermissionMixin, viewsets.ModelViewSet):
     queryset = Media.objects.all()
     serializer_class = MediaSerializer
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
 
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -120,6 +149,9 @@ class PostViewSet(PermissionMixin, viewsets.ModelViewSet):
     queryset = Post.objects.all()
     serializer_class = PostSerializer
 
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
     def get_queryset(self):
         queryset = super().get_queryset()
         tag_ids = self.request.query_params.get('tag', '')
@@ -135,11 +167,17 @@ class EventViewSet(PermissionMixin, ModelViewSet):
     queryset = Event.objects.all()
     serializer_class = EventSerializer
 
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
 
 class ContactViewSet(PermissionMixin, ModelViewSet):
     queryset = Contact.objects.all()
     serializer_class = ContactSerializer
     permission_classes = [IsAuthenticated, IsOwnerOrInvolved]
+
+    def perform_create(self, serializer):
+        serializer.save(requester=self.request.user)
 
 
 class AttendeeViewSet(PermissionMixin, ModelViewSet):
@@ -152,16 +190,38 @@ class UniqueViewSet(PermissionMixin, ModelViewSet):
     queryset = Unique.objects.all()
     serializer_class = UniqueSerializer
 
+    def perform_create(self, serializer):
+        raise PermissionDenied()
+
 
 class RelationshipLabelViewSet(PermissionMixin, ModelViewSet):
     queryset = RelationshipLabel.objects.all()
     serializer_class = RelationshipLabelSerializer
+
+    def get_permissions(self):
+        if self.action not in ('list', 'retrieve'):
+            from rest_framework.permissions import IsAdminUser
+            return [IsAdminUser()]
+        return [IsAuthenticated()]
 
 
 class TagViewSet(PermissionMixin, viewsets.ModelViewSet):
     queryset = Tag.objects.all()
     serializer_class = TagSerializer
     permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        if self.request.user.is_staff:
+            return queryset
+        user = self.request.user
+        return queryset.filter(Q(posttag__post__user=user) | Q(mediatag__media__user=user) | Q(usertag__user=user)).distinct()
+
+    def get_permissions(self):
+        if self.action in ('update', 'partial_update', 'destroy'):
+            from rest_framework.permissions import IsAdminUser
+            return [IsAdminUser()]
+        return [IsAuthenticated()]
 
 
 class TagSearchView(ListAPIView):
@@ -170,33 +230,32 @@ class TagSearchView(ListAPIView):
 
     def get_queryset(self):
         query = self.request.query_params.get('q', '')
-        queryset = Tag.objects.filter(name__icontains=query)[:4]
+        user = self.request.user
+        queryset = Tag.objects.filter(
+            Q(posttag__post__user=user) | Q(mediatag__media__user=user) | Q(usertag__user=user),
+            name__icontains=query,
+        ).distinct()[:4]
         return queryset
 
-
-from urllib.parse import urlparse
 
 class MediaDetailView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, media_id):
+        media_object = get_object_or_404(Media, pk=media_id, user=request.user)
         try:
-            media_object = Media.objects.get(pk=media_id)
             object_url = media_object.storage_file.name
-
-            # Debugging output
-            print(f"Object URL from database: {object_url}")
 
             if object_url.startswith('https://') or object_url.startswith('http://'):
                 parsed_url = urlparse(object_url)
                 object_name = parsed_url.path.lstrip('/')
+                bucket_prefix = f"{os.environ.get('GS_BUCKET_NAME')}/"
+                if object_name.startswith(bucket_prefix):
+                    object_name = object_name[len(bucket_prefix):]
             else:
                 object_name = object_url
 
             object_name = object_name.strip('/')
-            if object_name.startswith('qip_media/'):
-                object_name = object_name.replace('qip_media/', '', 1)
-
             # Generate the signed URL for fetching the media
             signed_url = generate_signed_url(
                 bucket_name=os.environ.get('GS_BUCKET_NAME'),
@@ -215,11 +274,8 @@ class MediaDetailView(APIView):
 
             return Response(media_data)
 
-        except Media.DoesNotExist:
-            return Response({'error': 'Media object not found'}, status=404)
-        except Exception as e:
-            print(f"Error fetching media details: {str(e)}")  # Print the error for debugging
-            return Response({'error': str(e)}, status=500)
+        except Exception:
+            return Response({'error': 'Unable to retrieve media'}, status=500)
 
 
 
@@ -229,21 +285,19 @@ class GenerateSignedURLView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, *args, **kwargs):
-        if not request.user.is_authenticated:
-            return Response({'error': 'Unauthorized'}, status=403)
-
         filename = request.query_params.get('filename')
         content_type = request.query_params.get('contentType')
-        if not filename or not content_type:
+        if not filename or not os.path.basename(filename) or not content_type:
             return Response({'error': 'Missing filename or contentType'}, status=400)
 
         try:
             bucket_name = os.environ.get('GS_BUCKET_NAME')
-            signed_url = generate_signed_url(bucket_name, filename, content_type, method='PUT')
-            print("Generated Signed URL:", signed_url)
+            # Never sign an arbitrary path supplied by a client: isolate every upload.
+            object_name = f"uploads/{request.user.pk}/{uuid.uuid4().hex}/{os.path.basename(filename)}"
+            signed_url = generate_signed_url(bucket_name, object_name, content_type, method='PUT')
             return Response({'signedUrl': signed_url})
-        except Exception as e:
-            return Response({'error': str(e)}, status=500)
+        except Exception:
+            return Response({'error': 'Unable to sign upload'}, status=500)
 
 
 
@@ -255,9 +309,6 @@ class AddItemView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, *args, **kwargs):
-        if not request.user.is_authenticated:
-            return Response({'error': 'Unauthorized'}, status=403)
-
         content = request.data.get('content')
         created_time = request.data.get('created_time', None)
         media_url = request.data.get('media_url')
@@ -276,17 +327,26 @@ class AddItemView(APIView):
                     tag = Tag.objects.get(id=tag_id)
                     PostTag.objects.create(post=post, tag=tag)
             else:
+                if not media_url:
+                    raise ValidationError({'media_url': 'Required for media.'})
+                parsed = urlparse(media_url)
+                bucket = os.environ.get('GS_BUCKET_NAME')
+                object_name = parsed.path.lstrip('/')
+                if parsed.scheme != 'https' or parsed.hostname not in ('storage.googleapis.com', 'storage.cloud.google.com') or not object_name.startswith(f'{bucket}/'):
+                    raise ValidationError({'media_url': 'Invalid upload location.'})
+                object_name = object_name[len(bucket) + 1:]
+                if not object_name.startswith(f'uploads/{user.pk}/'):
+                    raise ValidationError({'media_url': 'Invalid upload location.'})
                 media_type = 'video' if media_url.lower().endswith(('.mp4', '.avi', '.mov')) else 'image'
                 storage = CustomGoogleCloudStorage()
-                # Ensure the URL is stored correctly
-                custom_url = storage.url(media_url.split('/')[-1])
+                custom_url = storage.url(object_name)
                 media = Media.objects.create(
                     user=user,
                     caption=content if content else '',
                     media_type=media_type,
                     permalink=custom_url,  # Use the custom URL
-                    shortcode=media_url.split('/')[-1],
-                    storage_file=custom_url,  # Ensure this is correct
+                    shortcode=os.path.basename(object_name)[:50],
+                    storage_file=object_name,
                     is_published=True,
                     category=1
                 )
@@ -295,8 +355,10 @@ class AddItemView(APIView):
                     MediaTag.objects.create(media=media, tag=tag)
 
             return Response({'message': 'Item added successfully'})
-        except Exception as e:
-            return Response({'error': str(e)}, status=500)
+        except ValidationError:
+            raise
+        except Exception:
+            return Response({'error': 'Unable to add item'}, status=500)
 
 
 
@@ -315,8 +377,7 @@ class PasswordResetRequestView(APIView):
             reset_token = default_token_generator.make_token(user)
             uid = urlsafe_base64_encode(force_bytes(user.pk))
             reset_url = request.build_absolute_uri(
-                reverse('password_reset_confirm', kwargs={
-                        'uidb64': uid, 'token': reset_token})
+                f'/password-reset-confirm/{uid}/{reset_token}'
             )
             send_mail(
                 'Password Reset Request',

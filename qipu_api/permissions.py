@@ -1,6 +1,7 @@
 from rest_framework import permissions
 from rest_framework.permissions import IsAuthenticated
-from .models import User, Contact, Attendee, Media, Post, Event, RelationshipLabel, UserTag
+from django.db.models import Q
+from .models import User, Contact, Attendee, Media, Post, Event, RelationshipLabel, UserTag, Unique, Tag
 
 
 class IsOwner(permissions.BasePermission):
@@ -52,8 +53,22 @@ class PermissionMixin(object):
     """
 
     def get_permissions(self):
-        if self.action in ['create', 'update', 'partial_update', 'destroy']:
-            self.permission_classes = [IsAuthenticated, IsOwner]
-        else:
-            self.permission_classes = [IsAuthenticated]
-        return super().get_permissions()
+        if self.action in ['update', 'partial_update', 'destroy']:
+            return [IsAuthenticated(), IsOwnerOrInvolved() if self.queryset.model in (Contact, Attendee) else IsOwner()]
+        return [IsAuthenticated()]
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        user = self.request.user
+        model = queryset.model
+        if model is User:
+            return queryset.filter(pk=user.pk)
+        if model is Contact:
+            return queryset.filter(Q(requester=user) | Q(recipient=user))
+        if model is Attendee:
+            return queryset.filter(Q(user=user) | Q(event__user=user))
+        if model in (Media, Post, Event):
+            return queryset.filter(user=user)
+        if model is Unique:
+            return queryset.none()
+        return queryset

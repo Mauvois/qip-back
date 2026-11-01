@@ -1,7 +1,7 @@
-from django.test import TestCase, RequestFactory
-from django.core.files.uploadedfile import SimpleUploadedFile
-from .models import User, Media, Tag, MediaTag  # Import the MediaTag model
-from .views import MediaViewSet
+from unittest.mock import patch
+from django.test import TestCase
+from .models import User, Media, Tag, MediaTag, Post, Contact
+from .views import MediaViewSet, PostViewSet, MediaDetailView, GenerateSignedURLView, UserViewSet, ContactViewSet, AddItemView, TagViewSet, TagSearchView
 from rest_framework.test import APIRequestFactory, force_authenticate
 from rest_framework import status
 
@@ -9,6 +9,9 @@ from rest_framework import status
 class MediaViewSetTestCase(TestCase):
     def setUp(self):
         self.factory = APIRequestFactory()
+        storage_url = patch('qipu_api.utility.CustomGoogleCloudStorage.url', return_value='https://storage.cloud.google.com/test-bucket/media_files/file.txt')
+        storage_url.start()
+        self.addCleanup(storage_url.stop)
 
         self.user = User.objects.create_user(
             username='testuser', email='test@example.com', password='testpassword', first_name='Test', last_name='User')
@@ -18,7 +21,7 @@ class MediaViewSetTestCase(TestCase):
         self.tag1 = Tag.objects.create(name='Tag 1')
         self.tag2 = Tag.objects.create(name='Tag 2')
 
-        dummy_file = SimpleUploadedFile('file.txt', b'file_content')
+        dummy_file = 'media_files/file.txt'
         category_example = 1
 
         self.media1 = Media.objects.create(
@@ -103,3 +106,86 @@ class MediaViewSetTestCase(TestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         # Expecting 1 media item for self.other_user
         self.assertEqual(len(response.data), 1)
+
+    def test_other_user_media_is_not_retrievable_or_editable(self):
+        view = MediaViewSet.as_view({'get': 'retrieve', 'delete': 'destroy'})
+        for method in (self.factory.get, self.factory.delete):
+            request = method(f'/media/{self.media3.pk}/')
+            force_authenticate(request, user=self.user)
+            self.assertEqual(view(request, pk=self.media3.pk).status_code, 404)
+
+    @patch('qipu_api.views.generate_signed_url', return_value='https://signed.example/file')
+    def test_media_detail_only_signs_owned_file(self, sign):
+        view = MediaDetailView.as_view()
+        request = self.factory.get(f'/media-detail/{self.media3.pk}/')
+        force_authenticate(request, user=self.user)
+        self.assertEqual(view(request, media_id=self.media3.pk).status_code, 404)
+        sign.assert_not_called()
+        request = self.factory.get(f'/media-detail/{self.media1.pk}/')
+        force_authenticate(request, user=self.user)
+        self.assertEqual(view(request, media_id=self.media1.pk).status_code, 200)
+        sign.assert_called_once()
+
+    @patch('qipu_api.views.generate_signed_url', return_value='https://signed.example/upload')
+    def test_upload_key_is_server_owned(self, sign):
+        view = GenerateSignedURLView.as_view()
+        request = self.factory.get('/generate-signed-url/', {'filename': '../foreign.txt', 'contentType': 'text/plain'})
+        force_authenticate(request, user=self.user)
+        self.assertEqual(view(request).status_code, 200)
+        key = sign.call_args.args[1]
+        self.assertTrue(key.startswith(f'uploads/{self.user.pk}/'))
+        self.assertTrue(key.endswith('/foreign.txt'))
+        self.assertNotIn('..', key)
+
+    def test_posts_are_scoped_and_creator_cannot_be_spoofed(self):
+        foreign = Post.objects.create(user=self.other_user, content='foreign')
+        view = PostViewSet.as_view({'get': 'list', 'post': 'create'})
+        request = self.factory.get('/posts/')
+        force_authenticate(request, user=self.user)
+        self.assertEqual(view(request).data, [])
+        request = self.factory.post('/posts/', {'content': 'mine', 'user': self.other_user.pk})
+        force_authenticate(request, user=self.user)
+        self.assertEqual(view(request).status_code, 201)
+        self.assertEqual(Post.objects.exclude(pk=foreign.pk).get().user, self.user)
+
+    def test_users_are_scoped_to_self(self):
+        request = self.factory.get('/users/')
+        force_authenticate(request, user=self.user)
+        response = UserViewSet.as_view({'get': 'list'})(request)
+        self.assertEqual([item['id'] for item in response.data], [self.user.pk])
+
+    def test_contacts_are_scoped_to_participants(self):
+        contact = Contact.objects.create(requester=self.other_user, recipient=self.user)
+        request = self.factory.get('/contacts/')
+        force_authenticate(request, user=self.user)
+        self.assertEqual(ContactViewSet.as_view({'get': 'list'})(request).data[0]['id'], contact.pk)
+        stranger = User.objects.create_user(username='stranger', email='stranger@example.com', password='pass')
+        request = self.factory.get(f'/contacts/{contact.pk}/')
+        force_authenticate(request, user=stranger)
+        self.assertEqual(ContactViewSet.as_view({'get': 'retrieve'})(request, pk=contact.pk).status_code, 404)
+
+    def test_login_cookie_allows_session_check_without_token_in_body(self):
+        response = self.client.post('/login/', {'username': 'testuser', 'password': 'testpassword'}, content_type='application/json', secure=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn('token', response.json())
+        self.assertTrue(response.cookies['authToken']['httponly'])
+        response = self.client.get('/check_session/', secure=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['user']['id'], self.user.pk)
+
+    def test_add_item_rejects_foreign_upload_path(self):
+        request = self.factory.post('/items/add/', {
+            'content': 'foreign file', 'is_media': True,
+            'media_url': f'https://storage.googleapis.com/test-bucket/uploads/{self.other_user.pk}/file.png',
+        }, format='json')
+        force_authenticate(request, user=self.user)
+        self.assertEqual(AddItemView.as_view()(request).status_code, 400)
+        self.assertFalse(Media.objects.filter(caption='foreign file').exists())
+
+    def test_tags_from_other_users_are_not_listed_or_searched(self):
+        request = self.factory.get('/tags/')
+        force_authenticate(request, user=self.other_user)
+        self.assertEqual([tag['id'] for tag in TagViewSet.as_view({'get': 'list'})(request).data], [self.tag1.pk])
+        request = self.factory.get('/tag_search/', {'q': 'Tag'})
+        force_authenticate(request, user=self.other_user)
+        self.assertEqual([tag['id'] for tag in TagSearchView.as_view()(request).data], [self.tag1.pk])

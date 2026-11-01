@@ -25,6 +25,8 @@ steps:
     environment:
       DJANGO_SECRET_KEY:
         from_secret: DJANGO_SECRET_KEY
+      ALLOWED_HOSTS:
+        from_secret: ALLOWED_HOSTS
       DB_HOST:
         from_secret: DB_HOST
       DB_PORT:
@@ -52,7 +54,7 @@ steps:
       - docker compose -f docker/staging/docker-compose.yml -p qip_api_staging run --rm pytest
     when:
       branch: [staging]
-      event: [push, manual]
+      event: [manual]
 
   deploy-prod:
     image: docker:28-cli
@@ -63,6 +65,8 @@ steps:
     environment:
       DJANGO_SECRET_KEY:
         from_secret: DJANGO_SECRET_KEY
+      ALLOWED_HOSTS:
+        from_secret: ALLOWED_HOSTS
       DB_HOST:
         from_secret: DB_HOST
       DB_PORT:
@@ -90,4 +94,4 @@ steps:
       - docker compose -f docker/prod/docker-compose.yml -p qip_api_prod up -d --build --remove-orphans api
     when:
       branch: [prod]
-      event: [push, manual]
+      event: [manual]

@@ -13,8 +13,13 @@ services:
         gunicorn qip.wsgi:application --bind 0.0.0.0:80
       "
     environment:
+      DEBUG: "false"
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS}
       DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
       SIGNING_SECRET: ${SIGNING_SECRET}
+      ZOTERO_OAUTH_CLIENT_KEY: ${ZOTERO_OAUTH_CLIENT_KEY:-}
+      ZOTERO_OAUTH_CLIENT_SECRET: ${ZOTERO_OAUTH_CLIENT_SECRET:-}
+      ZOTERO_TOKEN_ENCRYPTION_KEY: ${ZOTERO_TOKEN_ENCRYPTION_KEY:-}
       DB_HOST: ${DB_HOST}
       DB_PORT: ${DB_PORT}
       DB_USER: ${DB_USER}

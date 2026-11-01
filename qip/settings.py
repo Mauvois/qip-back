@@ -20,10 +20,9 @@ from google.oauth2 import service_account
 dotenv.load_dotenv()
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
-# BASE_DIR = Path(__file__).resolve().parent.parent
-BASE_DIR = Path(__file__).resolve().parent.parent.parent
-FRONTEND_DIR = BASE_DIR / 'frontend'
-BACKEND_DIR = BASE_DIR / 'backend'
+BASE_DIR = Path(__file__).resolve().parent.parent
+FRONTEND_DIR = BASE_DIR.parent / 'qip-front'
+BACKEND_DIR = BASE_DIR
 
 
 # Quick-start development settings - unsuitable for production
@@ -34,9 +33,11 @@ SECRET_KEY = os.environ['DJANGO_SECRET_KEY']
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ['DEBUG'].lower() == 'true'
+QIP_LOCAL_STORAGE = DEBUG and os.environ.get('QIP_STORAGE_MODE') == 'local'
 
 # for production, always set it to the domains your app will be hosted on.
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = [host.strip() for host in os.environ.get('ALLOWED_HOSTS', '').split(',') if host.strip()]
+CSRF_TRUSTED_ORIGINS = [origin.strip() for origin in os.environ.get('CSRF_TRUSTED_ORIGINS', '').split(',') if origin.strip()]
 
 
 # Application definition
@@ -86,9 +87,10 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = 'qip.urls'
 
-SECURE_SSL_REDIRECT = True
-SESSION_COOKIE_SECURE = True
-CSRF_COOKIE_SECURE = True
+SECURE_SSL_REDIRECT = not QIP_LOCAL_STORAGE
+SESSION_COOKIE_SECURE = not QIP_LOCAL_STORAGE
+CSRF_COOKIE_SECURE = not QIP_LOCAL_STORAGE
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
@@ -119,7 +121,9 @@ REST_FRAMEWORK = {
 CORS_ALLOW_ALL_ORIGINS = False
 
 CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000"  # If your frontend runs on this during development
+    "http://localhost:3000",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
     # "https://yourfrontenddomain.com",  # If you have a production frontend domain
 ]
 
@@ -146,7 +150,12 @@ VUE_APP_BACKEND_URL = 'https://127.0.0.1:8000/'
 
 AUTH_USER_MODEL = 'qipu_api.User'
 
-EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+EMAIL_BACKEND = os.environ.get('EMAIL_BACKEND', 'django.core.mail.backends.smtp.EmailBackend')
+EMAIL_HOST = os.environ.get('EMAIL_HOST', 'localhost')
+EMAIL_PORT = int(os.environ.get('EMAIL_PORT', '25'))
+EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '')
+EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
+EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS', 'false').lower() == 'true'
 
 AUTHENTICATION_BACKENDS = [
     'django.contrib.auth.backends.ModelBackend',
@@ -201,13 +210,14 @@ DATABASES = {
 # Storage
 # Il y a certainement des choses à rajouter dans le fichier .ENV, à vérifier
 
-DEFAULT_FILE_STORAGE = 'qipu_api.utility.CustomGoogleCloudStorage'
-GS_BUCKET_NAME = os.environ['GS_BUCKET_NAME']
-GS_PROJECT_ID = os.environ['GS_PROJECT_ID']
-# GS_MEDIA_BUCKET_NAME = 'your-media-bucket-name'
-GS_CREDENTIALS = service_account.Credentials.from_service_account_file(
-    os.environ['GOOGLE_APPLICATION_CREDENTIALS']
-)
+DEFAULT_FILE_STORAGE = ('django.core.files.storage.FileSystemStorage' if QIP_LOCAL_STORAGE
+                        else 'qipu_api.utility.CustomGoogleCloudStorage')
+if not QIP_LOCAL_STORAGE:
+    GS_BUCKET_NAME = os.environ['GS_BUCKET_NAME']
+    GS_PROJECT_ID = os.environ['GS_PROJECT_ID']
+    GS_CREDENTIALS = service_account.Credentials.from_service_account_file(
+        os.environ['GOOGLE_APPLICATION_CREDENTIALS']
+    )
 
 
 # Password validation
@@ -248,9 +258,7 @@ STATIC_URL = '/static/'
 
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
-STATICFILES_DIRS = [
-    FRONTEND_DIR / 'src' / 'assets',
-]
+STATICFILES_DIRS = [FRONTEND_DIR / 'src' / 'assets'] if (FRONTEND_DIR / 'src' / 'assets').exists() else []
 
 # STATICFILES_DIRS = [
 #     BASE_DIR / 'dist',

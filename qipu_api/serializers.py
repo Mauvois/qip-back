@@ -4,7 +4,7 @@ from .models import User, Media, Post, Event, Contact, Attendee, Unique, Relatio
 
 
 class UserSerializer(serializers.ModelSerializer):
-    password = serializers.CharField(write_only=True, required=True, style={
+    password = serializers.CharField(write_only=True, required=False, style={
                                      'input_type': 'password'})
 
     class Meta:
@@ -20,6 +20,14 @@ class UserSerializer(serializers.ModelSerializer):
         user.save()
         return user
 
+    def update(self, instance, validated_data):
+        password = validated_data.pop('password', None)
+        instance = super().update(instance, validated_data)
+        if password:
+            instance.set_password(password)
+            instance.save(update_fields=['password'])
+        return instance
+
 
 class MediaSerializer(serializers.ModelSerializer):
     tagIds = serializers.SerializerMethodField()
@@ -27,6 +35,7 @@ class MediaSerializer(serializers.ModelSerializer):
     class Meta:
         model = Media
         fields = '__all__'  # Includes all fields from the Media model, plus the tagIds we're adding
+        read_only_fields = ['user', 'created_time']
 
     def get_tagIds(self, obj):
         # Get all MediaTag instances related to this media and return their tag IDs
@@ -39,6 +48,7 @@ class PostSerializer(serializers.ModelSerializer):
     class Meta:
         model = Post
         fields = '__all__'  # Includes all fields from the Post model, plus the tagIds we're adding
+        read_only_fields = ['user', 'created_time']
 
     def get_tagIds(self, obj):
         # Get all PostTag instances related to this post and return their tag IDs
@@ -49,18 +59,35 @@ class EventSerializer(serializers.ModelSerializer):
     class Meta:
         model = Event
         fields = '__all__'
+        read_only_fields = ['user', 'created_time']
 
 
 class ContactSerializer(serializers.ModelSerializer):
     class Meta:
         model = Contact
         fields = '__all__'
+        read_only_fields = ['requester']
+
+    def validate(self, attrs):
+        if self.instance and 'recipient' in attrs and attrs['recipient'] != self.instance.recipient:
+            raise serializers.ValidationError({'recipient': 'Cannot change recipient.'})
+        return attrs
 
 
 class AttendeeSerializer(serializers.ModelSerializer):
     class Meta:
         model = Attendee
         fields = '__all__'
+
+    def validate(self, attrs):
+        event = attrs.get('event', self.instance.event if self.instance else None)
+        if not self.instance and event and event.user_id != self.context['request'].user.pk:
+            raise serializers.ValidationError({'event': 'Only the event owner can invite.'})
+        if self.instance and event != self.instance.event:
+            raise serializers.ValidationError({'event': 'Cannot change event.'})
+        if self.instance and 'user' in attrs and attrs['user'] != self.instance.user:
+            raise serializers.ValidationError({'user': 'Cannot change attendee.'})
+        return attrs
 
 
 class UniqueSerializer(serializers.ModelSerializer):

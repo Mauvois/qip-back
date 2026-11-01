@@ -5,39 +5,39 @@ services:
       context: ../..
       dockerfile: Dockerfile
     container_name: qip_api_prod
-    ports:
-      - "8012:80"  # ou un autre port libre si 8012 est pris
+    expose:
+      - "80"
+    command: >
+      sh -c "python manage.py migrate --noinput &&
+             python manage.py collectstatic --noinput &&
+             exec gunicorn qip.wsgi:application --bind 0.0.0.0:80"
     environment:
+      DEBUG: "false"
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS}
+      CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS:-https://qip.taan.ovh}
       DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
+      SIGNING_SECRET: ${SIGNING_SECRET}
+      ZOTERO_OAUTH_CLIENT_KEY: ${ZOTERO_OAUTH_CLIENT_KEY:-}
+      ZOTERO_OAUTH_CLIENT_SECRET: ${ZOTERO_OAUTH_CLIENT_SECRET:-}
+      ZOTERO_TOKEN_ENCRYPTION_KEY: ${ZOTERO_TOKEN_ENCRYPTION_KEY:-}
       DB_HOST: ${DB_HOST}
       DB_PORT: ${DB_PORT}
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
       DB_NAME: ${DB_NAME}
+      GS_BUCKET_NAME: ${GS_BUCKET_NAME}
+      GS_PROJECT_ID: ${GS_PROJECT_ID}
+      GOOGLE_CREDENTIALS_B64: ${GOOGLE_CREDENTIALS_B64}
+    volumes:
+      - qip_static:/app/staticfiles
     networks:
       - qip_backend_net
-      - woodpecker_default
     restart: unless-stopped
-
-  pytest:
-    image: qip_api_prod_api
-    working_dir: /app
-    command: sh -c "pip install -r requirements.txt && pytest"
-    environment:
-      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
-      DB_HOST: ${DB_HOST}
-      DB_PORT: ${DB_PORT}
-      DB_USER: ${DB_USER}
-      DB_PASSWORD: ${DB_PASSWORD}
-      DB_NAME: ${DB_NAME}
-    depends_on:
-      - api
-    networks:
-      - qip_backend_net
-      - woodpecker_default
 
 networks:
   qip_backend_net:
     external: true
-  woodpecker_default:
-    external: true
+
+volumes:
+  qip_static:
+    name: qip_static

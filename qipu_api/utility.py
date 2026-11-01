@@ -3,12 +3,15 @@
 import os
 import uuid
 from django.http import HttpResponse
+from django.conf import settings
 from django.shortcuts import redirect
 from django.urls import reverse
 from google.cloud import storage
 from datetime import timedelta
 from storages.backends.gcloud import GoogleCloudStorage
 from urllib.parse import urlparse
+from rest_framework_simplejwt.exceptions import TokenError
+from rest_framework_simplejwt.tokens import AccessToken
 
 
 # code proposé par ChatGPT3.5 tel quel
@@ -33,8 +36,8 @@ def set_token_cookie(response: HttpResponse, token: str) -> None:
         key='authToken',
         value=token,
         httponly=True,
-        samesite='None',  # Setting the SameSite attribute to 'None'
-        secure=True,      # Ensuring the cookie is sent over HTTPS
+        samesite='Lax' if settings.QIP_LOCAL_STORAGE else 'None',
+        secure=not settings.QIP_LOCAL_STORAGE,
         # Add other properties as needed
     )
 
@@ -45,16 +48,20 @@ class TokenFromCookieMiddleware:
 
     def __call__(self, request):
         token = request.COOKIES.get('authToken', None)
+        invalid_token = False
         if token:
-            print("Token extracted:", token)
-            request.META['HTTP_AUTHORIZATION'] = f"Bearer {token}"
-            print("Authorization header set:",
-                  request.META['HTTP_AUTHORIZATION'])
-        else:
-            print("No token found in cookies.")
-
+            try:
+                AccessToken(token)
+            except TokenError:
+                invalid_token = True
+            else:
+                # Authentication endpoints must remain usable to switch accounts.
+                if request.path not in ('/login/', '/signup/', '/password-reset/') and 'HTTP_AUTHORIZATION' not in request.META:
+                    request.META['HTTP_AUTHORIZATION'] = f"Bearer {token}"
         response = self.get_response(request)
-        print("Response status:", response.status_code)
+        # Do not overwrite the fresh authToken set by a successful login.
+        if invalid_token and 'authToken' not in response.cookies:
+            response.delete_cookie('authToken')
         return response
 
 
@@ -77,21 +84,12 @@ class RedirectAuthenticatedUserMiddleware:
 
 def generate_signed_url(bucket_name, object_name, content_type=None, expiration=timedelta(minutes=60), method='GET'):
     """Generates a signed URL for a GCS object."""
-    try:
-        storage_client = storage.Client()
-        bucket = storage_client.bucket(bucket_name)
-        blob = bucket.blob(object_name)
-        signed_url = blob.generate_signed_url(
-            expiration=expiration,
-            version="v4",
-            method=method,
-            content_type=content_type  # Include content_type if provided
-        )
-        print("Generated Signed URL:", signed_url)
-        return signed_url
-    except Exception as e:
-        print("Error generating signed URL:", str(e))
-        raise
+    storage_client = storage.Client()
+    bucket = storage_client.bucket(bucket_name)
+    blob = bucket.blob(object_name)
+    return blob.generate_signed_url(
+        expiration=expiration, version="v4", method=method, content_type=content_type
+    )
 
 
 
@@ -100,5 +98,4 @@ class CustomGoogleCloudStorage(GoogleCloudStorage):
         url = super().url(name)
         parsed_url = urlparse(url)
         new_url = f"https://storage.cloud.google.com{parsed_url.path}"
-        print(f"Generated URL: {new_url}")  # Debug statement
         return new_url
