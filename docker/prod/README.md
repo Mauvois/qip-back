@@ -55,7 +55,10 @@ docker compose -f docker/prod/docker-compose.prod.yml -p qip_front_prod up -d --
 Le volume Docker partagé `qip_static` contient les fichiers de l'admin Django.
 Le frontend publie uniquement `127.0.0.1:8012` sur le serveur ; l'API ne publie
 aucun port hôte. Configurer le proxy HTTPS ou le tunnel existant pour
-`qip.taan.ovh` vers ce port, sans réécrire les chemins. Vérifier ensuite
+`qip.taan.ovh` vers ce port, sans réécrire les chemins. Si le tunnel Cloudflare
+tourne lui-même dans un conteneur, `127.0.0.1` désigne **ce conteneur**, pas
+l'hôte : le raccorder à `qip_backend_net` et cibler `http://qip_front_prod:80`,
+ou passer par un proxy hôte. Vérifier ensuite
 `https://qip.taan.ovh/`, `https://qip.taan.ovh/api/terms/`, la connexion et
 l'admin. Pour diagnostiquer le démarrage :
 
