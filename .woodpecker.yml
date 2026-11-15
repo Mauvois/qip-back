@@ -1,97 +1,23 @@
+when:
+  - branch: staging
+    event: [push, manual]
+
 steps:
-  debug:
-    image: alpine
-    commands:
-      - echo "✅ Pipeline backend déclenché sur ${CI_COMMIT_BRANCH}"
-    when:
-      event: [push, manual, pull_request]
-
-  build:
-    image: python:3.11
-    commands:
-      - echo "📦 Build backend"
-      - pip install -r requirements.txt
-      - echo "✅ Tests backend à venir"
-    when:
-      branch: [staging, prod]
-      event: [push, manual]
-
-  deploy-staging:
-    image: docker:28-cli
-    privileged: true
-    depends_on: [build]
+  build-test:
+    image: docker:29-cli
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-    environment:
-      DJANGO_SECRET_KEY:
-        from_secret: DJANGO_SECRET_KEY
-      ALLOWED_HOSTS:
-        from_secret: ALLOWED_HOSTS
-      DB_HOST:
-        from_secret: DB_HOST
-      DB_PORT:
-        from_secret: DB_PORT
-      DB_USER:
-        from_secret: DB_USER
-      DB_PASSWORD:
-        from_secret: DB_PASSWORD
-      DB_NAME:
-        from_secret: DB_NAME
-      SIGNING_SECRET:
-        from_secret: SIGNING_SECRET
-      GS_BUCKET_NAME:
-        from_secret: GS_BUCKET_NAME
-      GS_PROJECT_ID:
-        from_secret: GS_PROJECT_ID
-      GOOGLE_CREDENTIALS_B64:
-        from_secret: GOOGLE_CREDENTIALS_B64
     commands:
-      - echo "🧪 Déploiement staging..."
-      - docker network inspect qip_backend_net >/dev/null 2>&1 || docker network create qip_backend_net
-      - docker network inspect woodpecker_default >/dev/null 2>&1 || docker network create woodpecker_default
-      - docker compose -f docker/staging/docker-compose.yml -p qip_api_staging down --remove-orphans || true
-      - docker compose -f docker/staging/docker-compose.yml -p qip_api_staging up -d --build --remove-orphans api
-      - docker compose -f docker/staging/docker-compose.yml -p qip_api_staging run --rm pytest
-    when:
-      branch: [staging]
-      event: [manual]
+      - docker build --label org.opencontainers.image.revision="$CI_COMMIT_SHA" -t "qip_api_prod_api:$CI_COMMIT_SHA" .
+      - sh ci/test.sh
 
-  deploy-prod:
-    image: docker:28-cli
-    privileged: true
-    depends_on: [build]
+  deploy:
+    image: docker:29-cli
+    depends_on: [build-test]
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-    environment:
-      DJANGO_SECRET_KEY:
-        from_secret: DJANGO_SECRET_KEY
-      ALLOWED_HOSTS:
-        from_secret: ALLOWED_HOSTS
-      DB_HOST:
-        from_secret: DB_HOST
-      DB_PORT:
-        from_secret: DB_PORT
-      DB_USER:
-        from_secret: DB_USER
-      DB_PASSWORD:
-        from_secret: DB_PASSWORD
-      DB_NAME:
-        from_secret: DB_NAME
-      SIGNING_SECRET:
-        from_secret: SIGNING_SECRET
-      GS_BUCKET_NAME:
-        from_secret: GS_BUCKET_NAME
-      GS_PROJECT_ID:
-        from_secret: GS_PROJECT_ID
-      GOOGLE_CREDENTIALS_B64:
-        from_secret: GOOGLE_CREDENTIALS_B64
+      - /Users/serveur/projets/qip/qip-back/.env.prod:/run/qip.env:ro
+      - /Users/serveur/docker/qip/ci-state:/ci-state
     commands:
-      - echo "🚀 Déploiement prod..."
-      - docker network inspect qip_backend_net >/dev/null 2>&1 || docker network create qip_backend_net
-      - docker network inspect woodpecker_default >/dev/null 2>&1 || docker network create woodpecker_default
-      - docker compose -f docker/prod/docker-compose.yml -p qip_api_prod down --remove-orphans || true
-      - docker rm -f qip_api_prod || true
-      - docker compose -f docker/prod/docker-compose.yml -p qip_api_prod up -d --build --remove-orphans api
-    when:
-      branch: [prod]
-      event: [manual]
+      - apk add --no-cache curl util-linux
+      - flock -w 900 /ci-state/deploy.lock sh ci/deploy.sh

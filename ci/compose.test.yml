@@ -1,0 +1,32 @@
+services:
+  db:
+    image: postgres:15-bookworm
+    environment:
+      POSTGRES_DB: qip_ci
+      POSTGRES_USER: qip_ci
+      POSTGRES_PASSWORD: ci-only-not-production
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U qip_ci -d qip_ci"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  tests:
+    image: ${QIP_API_IMAGE:?QIP_API_IMAGE is required}
+    environment:
+      DEBUG: "true"
+      QIP_STORAGE_MODE: local
+      GS_BUCKET_NAME: qip-ci-not-a-real-bucket
+      GS_PROJECT_ID: qip-ci-not-a-real-project
+      DJANGO_SECRET_KEY: ci-only-not-production
+      SIGNING_SECRET: ci-only-not-production
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_NAME: qip_ci
+      DB_USER: qip_ci
+      DB_PASSWORD: ci-only-not-production
+      ALLOWED_HOSTS: localhost,testserver
+      EMAIL_BACKEND: django.core.mail.backends.locmem.EmailBackend
+    command: [pytest, -q]

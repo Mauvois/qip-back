@@ -1,10 +1,31 @@
 services:
+  db:
+    image: postgres:15-bookworm
+    container_name: postgres_qip
+    environment:
+      POSTGRES_DB: ${DB_NAME:?DB_NAME is required}
+      POSTGRES_USER: ${DB_USER:?DB_USER is required}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+    volumes:
+      - qip_pgdata:/var/lib/postgresql/data
+    networks:
+      - qip_backend_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
   api:
-    image: qip_api_prod_api
+    image: ${QIP_API_IMAGE:-qip_api_prod_api}
     build:
       context: ../..
       dockerfile: Dockerfile
     container_name: qip_api_prod
+    depends_on:
+      db:
+        condition: service_healthy
     expose:
       - "80"
     command: >
@@ -27,17 +48,36 @@ services:
       DB_NAME: ${DB_NAME}
       GS_BUCKET_NAME: ${GS_BUCKET_NAME}
       GS_PROJECT_ID: ${GS_PROJECT_ID}
-      GOOGLE_CREDENTIALS_B64: ${GOOGLE_CREDENTIALS_B64}
+      GOOGLE_APPLICATION_CREDENTIALS: /secrets/credentials.json
     volumes:
+      - type: bind
+        source: ${GOOGLE_CREDENTIALS_FILE:?GOOGLE_CREDENTIALS_FILE is required}
+        target: /secrets/credentials.json
+        read_only: true
+        bind:
+          create_host_path: false
       - qip_static:/app/staticfiles
     networks:
       - qip_backend_net
     restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen(urllib.request.Request('http://127.0.0.1/api/terms/', headers={'Host': 'qip.taan.ovh', 'X-Forwarded-Proto': 'https'}), timeout=5)"
+      interval: 30s
+      timeout: 10s
+      start_period: 60s
+      retries: 3
 
 networks:
   qip_backend_net:
     external: true
 
 volumes:
+  qip_pgdata:
+    external: true
+    name: qip-bdd_pgdata_qip
   qip_static:
     name: qip_static
